@@ -44,8 +44,8 @@ namespace CardIdleRemastered
 
         public BadgeStockModel GetStockModel(string id)
         {
-            BadgeStockModel b;
-            Prices.TryGetValue(id, out b);
+            BadgeStockModel b = null;
+            Prices?.TryGetValue(id, out b);
             return b;
         }
     }

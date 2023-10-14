@@ -1,9 +1,12 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Navigation;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 
 namespace CardIdleRemastered
@@ -15,6 +18,7 @@ namespace CardIdleRemastered
     {
         private const string EmulationKey = @"Software\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_BROWSER_EMULATION";
         private static bool _browserEmulation;
+        public CookieCollection CookieCollection { get; private set; }
 
         public BrowserWindow()
         {
@@ -52,6 +56,27 @@ namespace CardIdleRemastered
             }
         }
 
+        private void OnCookieLoaded()
+        {
+            GetSessionCookies(CookieCollection);
+
+            var url = wbAuth.Source.AbsoluteUri;
+
+            if (false == String.IsNullOrWhiteSpace(Storage.SteamLoginSecure))
+            {
+                if (App.CardIdle.IsNewUser)
+                {
+                    App.CardIdle.IsNewUser = false;
+                    Title = Properties.Resources.TradingCardsFAQ;
+                    wbAuth.Source = (new Uri("https://steamcommunity.com/tradingcards/faq"));
+                }
+                else if (url.StartsWith(@"https://steamcommunity.com/id/"))
+                {
+                    Close();
+                }
+            }
+        }
+
         #region Dll Imports
 
         [DllImport("wininet.dll", CharSet = CharSet.Auto, SetLastError = true)]
@@ -77,24 +102,40 @@ namespace CardIdleRemastered
             InternetSetCookie("https://steamcommunity.com", "steamLogin", ";expires=Mon, 01 Jan 0001 00:00:00 GMT");
             InternetSetCookie("https://steamcommunity.com", "steamLoginSecure", ";expires=Mon, 01 Jan 0001 00:00:00 GMT");
             InternetSetCookie("https://steamcommunity.com", "steamRememberLogin", ";expires=Mon, 01 Jan 0001 00:00:00 GMT");
-
-            // When the form is loaded, navigate to the Steam login page using the web browser control
-            wbAuth.Navigate("https://steamcommunity.com/login/home/?goto=my/profile", "_self", null,
-                "User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko");
         }
 
         // Assigns the hex value for the DLL flag that allows Idle Master to be able to access cookie data marked as "HTTP Only"
         private const int InternetCookieHttpOnly = 0x2000;
+
+        private async Task GatherCookies(string url)
+        {
+            //access the cookies  
+            List<CoreWebView2Cookie> wv2Cookies = new List<CoreWebView2Cookie>();
+            if (wbAuth.CoreWebView2 != null)
+            {
+                wv2Cookies = await wbAuth.CoreWebView2.CookieManager.GetCookiesAsync("https://steamcommunity.com");
+            }
+            CookieCollection sysNetCookieCollection = new CookieCollection();
+            wv2Cookies.ForEach(c => sysNetCookieCollection.Add(c.ToSystemNetCookie()));
+
+            //set the cookies in the CookieCollection property  
+            CookieCollection = sysNetCookieCollection;
+
+            OnCookieLoaded();
+        }
+
 
         /// <summary>
         /// Returns cookie data based on Uri
         /// </summary>
         /// <param name="uri"></param>
         /// <returns></returns>
-        public static CookieContainer GetUriCookieContainer(Uri uri)
+        public CookieContainer GetUriCookieContainer(Uri uri)
         {
             // First, create a null cookie container
             CookieContainer cookies = null;
+
+            Application.Current.Dispatcher.Invoke(() => GatherCookies(uri.ToString()));
 
             // Determine cookie size
             int datasize = 8192 * 16;
@@ -129,23 +170,8 @@ namespace CardIdleRemastered
             return cookies;
         }
 
-        private void BrowserNavigated(object sender, NavigationEventArgs e)
+        private void BrowserNavigated(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
-            // Find the page header, and remove it.  This gives the login form a more streamlined look.
-            dynamic htmldoc = wbAuth.Document;
-            dynamic globalHeader = htmldoc.GetElementById("global_header");
-            if (globalHeader != null)
-            {
-                try
-                {
-                    globalHeader.parentNode.removeChild(globalHeader);
-                }
-                catch (Exception)
-                {
-
-                }
-            }
-
             // Get the URL of the page that just finished loading
             var src = wbAuth.Source;
             var url = wbAuth.Source.AbsoluteUri;
@@ -168,41 +194,7 @@ namespace CardIdleRemastered
             // If the page it just finished loading isn't the login page
             else if (url.StartsWith("javascript:") == false && url.StartsWith("about:") == false)
             {
-
-                try
-                {
-                    dynamic parentalNotice = htmldoc.GetElementById("parental_notice");
-                    if (parentalNotice != DBNull.Value && parentalNotice != null)
-                    {
-                        if (parentalNotice.OuterHtml != "")
-                        {
-                            // Steam family options enabled                            
-                            return;
-                        }
-                    }
-                }
-                catch (Exception)
-                {
-
-                }
-
-                // Get a list of cookies from the current page
-                var cookies = GetUriCookieContainer(src).GetCookies(src);
-
-                GetSessionCookies(cookies);
-
-                // Save all of the data to the program settings file, and close this form
-                if (false == String.IsNullOrWhiteSpace(Storage.SteamLoginSecure))
-                {
-                    if (App.CardIdle.IsNewUser)
-                    {
-                        App.CardIdle.IsNewUser = false;
-                        Title = Properties.Resources.TradingCardsFAQ;
-                        wbAuth.Navigate(new Uri("https://steamcommunity.com/tradingcards/faq"));
-                    }
-                    else if (url.StartsWith(@"https://steamcommunity.com/id/"))
-                        Close();
-                }
+                Application.Current.Dispatcher.Invoke(() => { GatherCookies(url.ToString()); });
             }
         }
 

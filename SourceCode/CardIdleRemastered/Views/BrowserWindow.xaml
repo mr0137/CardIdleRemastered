@@ -2,13 +2,20 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:res="clr-namespace:CardIdleRemastered.Properties"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="{x:Static res:Resources.SteamLogin}" 
         Height="Auto" Width="Auto" 
         WindowStartupLocation="CenterScreen"
         Loaded="BrowserWindowLoaded">
+    
+    <Window.Resources>
+        <!-- These CreationProperties use the Evergreen Edge executable that's installed on the machine. -->
+        <wv2:CoreWebView2CreationProperties x:Key="EvergreenWebView2CreationProperties" AdditionalBrowserArguments="AllowSingleSignOnUsingOSPrimaryAccount=true" />
+    </Window.Resources>
+    
     <Grid>
-        <WebBrowser Name="wbAuth"  
-                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch" 
-                    Navigated="BrowserNavigated"/>
+        <wv2:WebView2 x:Name="wbAuth" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      CreationProperties="{StaticResource EvergreenWebView2CreationProperties}" NavigationCompleted="BrowserNavigated"
+                      Source="https://steamcommunity.com/login/home/?goto=my/profile" />
     </Grid>
 </Window>
